@@ -15,6 +15,7 @@ def _callback() -> None:
 
 
 def main() -> None:
+    import bifrost.cli.configure_cmd
     import bifrost.cli.logs_cmd
     import bifrost.cli.run_cmd
     import bifrost.cli.ssh_cmd
