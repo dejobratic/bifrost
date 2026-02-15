@@ -11,7 +11,9 @@ def fetch_and_checkout(setup: SetupConfig, ref: str, latest: bool = False) -> No
 
     result = run_remote(setup, ["git", "checkout", ref])
     if result.returncode != 0:
-        raise SshError(f"git checkout '{ref}' failed on {setup.name}: {result.stderr.strip()}")
+        raise SshError(
+            f"git checkout '{ref}' failed on {setup.name}: {result.stderr.strip()}"
+        )
 
     if latest and _is_branch(ref):
         result = run_remote(setup, ["git", "pull", "--ff-only"])

@@ -4,7 +4,9 @@ from bifrost.core.errors import SshError
 from bifrost.core.models import SetupConfig
 
 
-def run_remote(setup: SetupConfig, command: list[str], capture: bool = True) -> subprocess.CompletedProcess[str]:
+def run_remote(
+    setup: SetupConfig, command: list[str], capture: bool = True
+) -> subprocess.CompletedProcess[str]:
     ssh_target = f"{setup.user}@{setup.host}"
     remote_cmd = " ".join(command)
     try:
@@ -24,7 +26,15 @@ def check_reachable(setup: SetupConfig, timeout: int = 5) -> bool:
     ssh_target = f"{setup.user}@{setup.host}"
     try:
         result = subprocess.run(
-            ["ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={timeout}", ssh_target, "true"],
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                f"ConnectTimeout={timeout}",
+                ssh_target,
+                "true",
+            ],
             capture_output=True,
             text=True,
             timeout=timeout + 2,

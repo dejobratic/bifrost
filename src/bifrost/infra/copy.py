@@ -5,7 +5,7 @@ import subprocess
 from dataclasses import asdict
 from pathlib import Path
 
-from bifrost.core.errors import ArtifactCopyError, SshError
+from bifrost.core.errors import ArtifactCopyError
 from bifrost.core.models import RunMetadata, SetupConfig
 from bifrost.infra.ssh import run_remote
 
@@ -19,7 +19,15 @@ class ArtifactCopier:
         run_remote(setup, ["mkdir", "-p", remote_run_dir])
 
         metadata_json = json.dumps(asdict(metadata), indent=2)
-        run_remote(setup, ["bash", "-c", f"cat > {remote_run_dir}/run.json << 'BIFROST_EOF'\n{metadata_json}\nBIFROST_EOF"])
+        run_remote(
+            setup,
+            [
+                "bash",
+                "-c",
+                f"cat > {remote_run_dir}/run.json << 'BIFROST_EOF'\n"
+                f"{metadata_json}\nBIFROST_EOF",
+            ],
+        )
 
     def copy_artifacts(self, setup: SetupConfig, run_id: str) -> list[str]:
         remote_run_dir = f"{setup.artifacts.remote_dir}/{run_id}"
@@ -42,6 +50,12 @@ class ArtifactCopier:
             raise ArtifactCopyError(f"rsync failed for {setup.name}: {e}") from e
 
         if result.returncode != 0:
-            raise ArtifactCopyError(f"rsync failed for {setup.name}: {result.stderr.strip()}")
+            raise ArtifactCopyError(
+                f"rsync failed for {setup.name}: {result.stderr.strip()}"
+            )
 
-        return [str(p.relative_to(self._project_root)) for p in local_run_dir.rglob("*") if p.is_file()]
+        return [
+            str(p.relative_to(self._project_root))
+            for p in local_run_dir.rglob("*")
+            if p.is_file()
+        ]

@@ -1,8 +1,10 @@
+import pytest
+
 from bifrost.core.models import ArtifactsConfig, RunMetadata, SetupConfig
 
 
 class TestSetupConfig:
-    def test_creates_with_required_fields(self):
+    def test_creates_with_required_fields(self) -> None:
         # Arrange / Act
         setup = SetupConfig(name="lab-a", host="10.0.0.1", user="ci")
 
@@ -13,20 +15,17 @@ class TestSetupConfig:
         assert setup.runner is None
         assert setup.artifacts == ArtifactsConfig()
 
-    def test_is_immutable(self):
+    def test_is_immutable(self) -> None:
         # Arrange
         setup = SetupConfig(name="lab-a", host="10.0.0.1", user="ci")
 
         # Act / Assert
-        try:
+        with pytest.raises(AttributeError):
             setup.host = "changed"  # type: ignore[misc]
-            assert False, "Should have raised"
-        except AttributeError:
-            pass
 
 
 class TestRunMetadata:
-    def test_creates_with_defaults(self):
+    def test_creates_with_defaults(self) -> None:
         # Arrange / Act
         meta = RunMetadata(
             run_id="abc123",

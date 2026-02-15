@@ -1,6 +1,3 @@
-import sys
-
-
 class BifrostError(Exception):
     exit_code: int = 1
 

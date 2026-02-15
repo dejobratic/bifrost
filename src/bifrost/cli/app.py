@@ -15,10 +15,10 @@ def _callback() -> None:
 
 
 def main() -> None:
-    import bifrost.cli.run_cmd  # noqa: F401
+    import bifrost.cli.logs_cmd
+    import bifrost.cli.run_cmd
+    import bifrost.cli.ssh_cmd
     import bifrost.cli.status_cmd  # noqa: F401
-    import bifrost.cli.logs_cmd  # noqa: F401
-    import bifrost.cli.ssh_cmd  # noqa: F401
 
     try:
         app()
@@ -26,4 +26,4 @@ def main() -> None:
         from rich.console import Console
 
         Console(stderr=True).print(f"[red]Error:[/red] {e.message}")
-        raise typer.Exit(code=e.exit_code)
+        raise typer.Exit(code=e.exit_code) from None

@@ -25,14 +25,15 @@ class GitLabCiGate:
         self._config = gitlab_config
         self._token = os.environ.get(gitlab_config.token_env, "")
         if not self._token:
+            env_var = gitlab_config.token_env
             raise ConfigError(
-                f"GitLab token not found in environment variable '{gitlab_config.token_env}'"
+                f"GitLab token not found in environment variable '{env_var}'"
             )
 
     def is_busy(self, setup_name: str) -> bool:
         url = f"{self._config.url}/api/v4/projects/{self._config.project_id}/pipelines"
         headers = {"PRIVATE-TOKEN": self._token}
-        params = {"status": "running", "per_page": 1}
+        params: dict[str, str | int] = {"status": "running", "per_page": 1}
 
         response = httpx.get(url, headers=headers, params=params, timeout=10)
         response.raise_for_status()

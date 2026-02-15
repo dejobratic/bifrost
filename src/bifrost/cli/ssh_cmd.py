@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from rich.console import Console
 
@@ -15,7 +13,7 @@ console = Console()
 
 @app.command()
 def ssh(
-    setup: Optional[str] = typer.Option(None, "--setup", "-s", help="Setup to connect to"),
+    setup: str | None = typer.Option(None, "--setup", "-s", help="Setup to connect to"),
 ) -> None:
     """Open an interactive SSH session to a setup."""
     config_path = find_config_file()
@@ -29,7 +27,8 @@ def ssh(
         raise ConfigError(f"Setup '{setup_name}' not found")
 
     setup_config = config.setups[setup_name]
-    console.print(f"Connecting to [bold]{setup_name}[/bold] ({setup_config.user}@{setup_config.host})...")
+    target = f"{setup_config.user}@{setup_config.host}"
+    console.print(f"Connecting to [bold]{setup_name}[/bold] ({target})...")
 
     exit_code = open_interactive_session(setup_config)
     raise typer.Exit(code=exit_code)

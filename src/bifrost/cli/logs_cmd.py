@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -16,8 +15,12 @@ console = Console()
 
 @app.command()
 def logs(
-    run_id: str = typer.Argument("last", help="Run ID or 'last' for the most recent run"),
-    setup: Optional[str] = typer.Option(None, "--setup", "-s", help="Setup to look for logs"),
+    run_id: str = typer.Argument(
+        "last", help="Run ID or 'last' for the most recent run"
+    ),
+    setup: str | None = typer.Option(
+        None, "--setup", "-s", help="Setup to look for logs"
+    ),
 ) -> None:
     """Show or fetch run logs."""
     config_path = find_config_file()
@@ -75,7 +78,11 @@ def _display_run(run_dir: Path) -> None:
         console.print("\n[bold]Log output:[/bold]")
         console.print(log_file.read_text())
 
-    files = [p for p in run_dir.rglob("*") if p.is_file() and p.name not in ("run.json", "run.log")]
+    files = [
+        p
+        for p in run_dir.rglob("*")
+        if p.is_file() and p.name not in ("run.json", "run.log")
+    ]
     if files:
         console.print(f"\n[bold]Artifacts:[/bold] {len(files)} file(s)")
         for f in files:

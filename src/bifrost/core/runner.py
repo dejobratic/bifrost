@@ -15,11 +15,15 @@ class CiGate(Protocol):
 
 
 class RemoteExecutor(Protocol):
-    def run_remote(self, setup: SetupConfig, command: list[str], capture: bool = True) -> subprocess.CompletedProcess[str]: ...
+    def run_remote(
+        self, setup: SetupConfig, command: list[str], capture: bool = True
+    ) -> subprocess.CompletedProcess[str]: ...
 
 
 class GitOps(Protocol):
-    def fetch_and_checkout(self, setup: SetupConfig, ref: str, latest: bool = False) -> None: ...
+    def fetch_and_checkout(
+        self, setup: SetupConfig, ref: str, latest: bool = False
+    ) -> None: ...
 
 
 class ArtifactCopier(Protocol):
@@ -47,7 +51,8 @@ class Runner:
         if not name:
             raise ConfigError("No setup specified and no default configured")
         if name not in self._config.setups:
-            raise ConfigError(f"Setup '{name}' not found. Available: {list(self._config.setups.keys())}")
+            available = list(self._config.setups.keys())
+            raise ConfigError(f"Setup '{name}' not found. Available: {available}")
         return self._config.setups[name]
 
     def run(
@@ -62,10 +67,14 @@ class Runner:
         setup = self.resolve_setup(setup_name)
         resolved_command = command or ([setup.runner] if setup.runner else None)
         if not resolved_command:
-            raise ConfigError(f"No command provided and no default runner for setup '{setup.name}'")
+            raise ConfigError(
+                f"No command provided and no default runner for setup '{setup.name}'"
+            )
 
         if not force and self._ci_gate.is_busy(setup.name):
-            raise CiBusyError(f"CI pipeline is busy on setup '{setup.name}'. Use --force to override.")
+            raise CiBusyError(
+                f"CI pipeline is busy on setup '{setup.name}'. Use --force to override."
+            )
 
         run_id = uuid.uuid4().hex[:12]
 

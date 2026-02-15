@@ -3,7 +3,12 @@ from pathlib import Path
 import yaml
 
 from bifrost.core.errors import ConfigError
-from bifrost.core.models import ArtifactsConfig, BifrostConfig, GitLabConfig, SetupConfig
+from bifrost.core.models import (
+    ArtifactsConfig,
+    BifrostConfig,
+    GitLabConfig,
+    SetupConfig,
+)
 
 CONFIG_FILENAMES = [".bifrost.yml", ".bifrost.yaml"]
 USER_CONFIG_DIR = Path.home() / ".config" / "bifrost" / "config.yml"
@@ -47,8 +52,9 @@ def _parse_config(raw: dict, path: Path) -> BifrostConfig:
     default_setup = defaults.get("setup")
 
     if default_setup and default_setup not in setups:
+        available = list(setups.keys())
         raise ConfigError(
-            f"Default setup '{default_setup}' not found in setups: {list(setups.keys())}"
+            f"Default setup '{default_setup}' not found in setups: {available}"
         )
 
     gitlab = _parse_gitlab(raw.get("gitlab"))
@@ -101,7 +107,7 @@ def _parse_gitlab(raw: dict | None) -> GitLabConfig | None:
     project_id = raw.get("project_id")
     token_env = raw.get("token_env")
 
-    if not all([url, project_id, token_env]):
+    if not url or not project_id or not token_env:
         raise ConfigError("GitLab config requires 'url', 'project_id', and 'token_env'")
 
     return GitLabConfig(url=url, project_id=int(project_id), token_env=token_env)

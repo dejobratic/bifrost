@@ -290,11 +290,33 @@ Adding new providers (GitHub Actions, Jenkins, etc.) means implementing the `CiG
 # Install with dev dependencies
 uv sync
 
+# Set up pre-commit hooks (runs ruff + mypy on every commit)
+uv run pre-commit install
+
 # Run tests
 uv run pytest
 
 # Run with verbose output
 uv run pytest -v
+```
+
+### Code quality
+
+Linting, formatting, and type checking are enforced via [pre-commit](https://pre-commit.com/) hooks.
+To run them manually:
+
+```bash
+# Lint (with auto-fix)
+uv run ruff check --fix src/ tests/
+
+# Format
+uv run ruff format src/ tests/
+
+# Type check
+uv run mypy
+
+# Run all pre-commit hooks against all files
+uv run pre-commit run --all-files
 ```
 
 ---
