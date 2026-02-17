@@ -60,22 +60,85 @@ bf --help
 
 ## Quick start
 
-1. Create a `.bifrost.yml` in your project root (see [Configuration](#configuration))
+1. Add a setup configuration:
+
+```bash
+bf config add office-a --host 10.0.0.5 --user ci --runner pytest --set-default
+```
+
 2. Run a command on a remote setup:
 
 ```bash
-bf run --setup office-a -- pytest -m smoke
+bf run -- pytest -m smoke
 ```
 
-3. Check results:
-
-```bash
-bf logs last
-```
+3. Check logs in `.bifrost/office-a/<run-id>/`
 
 ---
 
 ## Commands
+
+### `bf config` --- manage setup configurations
+
+Non-interactive CLI commands for managing setups:
+
+#### `bf config add`
+
+```bash
+bf config add <name> --host <host> --user <user> [OPTIONS]
+```
+
+Add a new setup configuration.
+
+**Options:**
+- `--host` (required): SSH hostname or IP
+- `--user` (required): SSH username
+- `--runner`: Default command to run (e.g., `pytest`)
+- `--remote-log-dir`: Remote log directory (default: `.bifrost/logs`)
+- `--local-log-dir`: Local log directory (default: `.bifrost/<name>`)
+- `--set-default`: Make this the default setup
+
+**Example:**
+```bash
+bf config add office-a --host 10.0.0.5 --user ci --runner pytest --set-default
+```
+
+#### `bf config list`
+
+```bash
+bf config list
+```
+
+Display all configured setups in a table.
+
+#### `bf config edit`
+
+```bash
+bf config edit <name> [OPTIONS]
+```
+
+Edit an existing setup. Any option not provided will keep its current value.
+
+**Example:**
+```bash
+bf config edit office-a --runner "pytest -v" --host 10.0.0.6
+```
+
+#### `bf config remove`
+
+```bash
+bf config remove <name>
+```
+
+Remove a setup configuration. Cannot remove the last remaining setup.
+
+#### `bf config set-default`
+
+```bash
+bf config set-default <name>
+```
+
+Set the default setup to use when `--setup` is not specified.
 
 ### `bf run` --- remote execution
 
@@ -133,24 +196,6 @@ bf status --setup office-a
 
 Shows a table with each setup's SSH reachability and CI pipeline state.
 
-### `bf setups` --- list configured setups
-
-```bash
-bf setups
-```
-
-Lists all setups from the config with host, user, default runner, and which one is the default.
-
-### `bf logs` --- view run logs
-
-```bash
-bf logs last                  # most recent run
-bf logs <run-id>              # specific run
-bf logs last --setup office-b # last run on a specific setup
-```
-
-Displays run metadata (setup, command, ref, exit code, timestamp) and any collected artifacts.
-
 ### `bf ssh` --- interactive session
 
 ```bash
@@ -186,17 +231,17 @@ setups:
     host: "10.0.0.5"
     user: "ci"
     runner: "pytest"              # default command when none given
-    artifacts:
-      remote_dir: ".bifrost"     # relative to project root on remote
-      local_dir: ".bifrost/office-a"
+    logs:
+      remote_log_dir: ".bifrost/logs"     # relative to project root on remote
+      local_log_dir: ".bifrost/office-a"
 
   office-b:
     host: "10.1.0.7"
     user: "ci"
     runner: "./run_tests.sh"
-    artifacts:
-      remote_dir: ".bifrost"
-      local_dir: ".bifrost/office-b"
+    logs:
+      remote_log_dir: ".bifrost/logs"
+      local_log_dir: ".bifrost/office-b"
 ```
 
 ### Config reference
@@ -211,8 +256,10 @@ setups:
 | `setups.<name>.host` | yes | SSH hostname or IP |
 | `setups.<name>.user` | yes | SSH username |
 | `setups.<name>.runner` | no | Default command when no `-- <cmd>` is given |
-| `setups.<name>.artifacts.remote_dir` | no | Remote artifact directory (default: `.bifrost`) |
-| `setups.<name>.artifacts.local_dir` | no | Local artifact directory (default: `.bifrost/<setup-name>`) |
+| `setups.<name>.logs.remote_log_dir` | no | Remote log directory (default: `.bifrost/logs`) |
+| `setups.<name>.logs.local_log_dir` | no | Local log directory (default: `.bifrost/<setup-name>`) |
+
+**Note:** The old `artifacts` config key is still supported for backward compatibility but will be mapped to `logs` internally.
 
 ---
 
@@ -226,11 +273,10 @@ setups:
 
 ## Run metadata
 
-Each run produces a folder under `.bifrost/<setup>/<run-id>/` (both remote and local) containing:
+Each run produces a folder under `.bifrost/logs/<run-id>/` on the remote and `.bifrost/<setup>/<run-id>/` locally containing:
 
-- `run.json` --- setup, ref, command, exit code, timestamp, artifact paths
-- `run.log` --- command output
-- Any additional artifacts from the run
+- `run.json` --- setup, ref, command, exit code, timestamp, log paths
+- Any logs or output from the run
 
 ---
 
@@ -243,35 +289,36 @@ Each run produces a folder under `.bifrost/<setup>/<run-id>/` (both remote and l
 | 3 | Config error |
 | 4 | SSH/connectivity error |
 | 5 | Remote command failed |
-| 6 | Artifact copy failed |
+| 6 | Log copy failed |
 
 ---
 
 ## Architecture
 
-bifrost uses three layers with clean separation:
+bifrost uses a vertical slice architecture with clean separation:
 
 ```
 src/bifrost/
-  cli/    → thin CLI commands (typer + rich)
-  core/   → domain models, config, run orchestration, error types
-  infra/  → SSH, rsync, GitLab API, git operations (subprocess-based)
+  cli/       → main app, version, error handling
+  commands/  → vertical slices per feature (run, ssh, status, config)
+  shared/    → domain models, config management, errors
+  infra/     → SSH, rsync, GitLab API, git operations (subprocess-based)
+  di.py      → dependency injection container
 ```
 
-- CLI handles argument parsing and output formatting only
-- Core contains all business logic; the `Runner` accepts protocol-based dependencies via constructor injection
+- Each command is a self-contained vertical slice with its own logic
+- Shared layer contains domain models, config management, and error types
 - Infra wraps external systems (SSH, rsync, GitLab API) behind protocols for testability
+- Lightweight DI container for dependency injection
 
-No DI container. No plugin system. Constructor injection only.
+### Pipeline gate
 
-### CI gate
+The pipeline gate is protocol-based (`PipelineGate`), currently supporting:
 
-The CI gate is protocol-based (`CiGate`), currently supporting:
+- `NonePipelineGate` --- always allows runs (used when no `gitlab` config is present)
+- `GitLabPipelineGate` --- checks GitLab for running/pending pipelines
 
-- `NoneCiGate` --- always allows runs (used when no `gitlab` config is present)
-- `GitLabCiGate` --- checks GitLab for running/pending pipelines
-
-Adding new providers (GitHub Actions, Jenkins, etc.) means implementing the `CiGate` protocol.
+Adding new providers (GitHub Actions, Jenkins, etc.) means implementing the `PipelineGate` protocol.
 
 ### Tech stack
 

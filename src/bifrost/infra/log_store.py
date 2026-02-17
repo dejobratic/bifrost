@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from dataclasses import asdict
 from pathlib import Path
 
 from bifrost.infra.ssh import run_remote
@@ -19,7 +18,7 @@ class LogStore:
         remote_run_dir = f"{setup.logs.remote_log_dir}/{metadata.run_id}"
         run_remote(setup, ["mkdir", "-p", remote_run_dir])
 
-        metadata_json = json.dumps(asdict(metadata), indent=2)
+        metadata_json = json.dumps(metadata.to_dict(), indent=2)
         run_remote(
             setup,
             [
