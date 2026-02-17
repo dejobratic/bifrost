@@ -1,7 +1,6 @@
 import subprocess
 
-from bifrost.core.errors import SshError
-from bifrost.core.models import SetupConfig
+from bifrost.shared import SetupConfig, SshError
 
 
 def run_remote(

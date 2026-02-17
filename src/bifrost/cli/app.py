@@ -1,6 +1,8 @@
 import typer
+from rich.console import Console
 
-from bifrost.core.errors import BifrostError
+from bifrost.di import create_container
+from bifrost.shared import BifrostError
 
 app = typer.Typer(
     name="bf",
@@ -8,23 +10,52 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+LOGO = """[bold magenta]
+██████╗ ██╗███████╗██████╗  ██████╗ ███████╗████████╗
+██╔══██╗██║██╔════╝██╔══██╗██╔═══██╗██╔════╝╚══██╔══╝
+██████╔╝██║█████╗  ██████╔╝██║   ██║███████╗   ██║
+██╔══██╗██║██╔══╝  ██╔══██╗██║   ██║╚════██║   ██║
+██████╔╝██║██║     ██║  ██║╚██████╔╝███████║   ██║
+╚═════╝ ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝
+[/bold magenta]"""
+
+
+def version_callback(value: bool) -> None:
+    if value:
+        from importlib.metadata import version as get_version
+
+        console = Console()
+        console.print(LOGO)
+        console.print(f"\nBifrost version {get_version('bifrost')}")
+        raise typer.Exit()
+
 
 @app.callback()
-def _callback() -> None:
-    pass
+def callback(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        None,
+        "--version",
+        "-v",
+        callback=version_callback,
+        is_eager=True,
+        help="Show version and exit",
+    ),
+) -> None:
+    """Initialize dependency injection container."""
+    ctx.obj = create_container()
 
 
 def main() -> None:
-    import bifrost.cli.configure_cmd
-    import bifrost.cli.logs_cmd
-    import bifrost.cli.run_cmd
-    import bifrost.cli.ssh_cmd
-    import bifrost.cli.status_cmd  # noqa: F401
+    import bifrost.commands.run.command
+    import bifrost.commands.ssh.command
+    import bifrost.commands.status.command  # noqa: F401
+    from bifrost.commands.config import config_app
+
+    app.add_typer(config_app)
 
     try:
         app()
     except BifrostError as e:
-        from rich.console import Console
-
         Console(stderr=True).print(f"[red]Error:[/red] {e.message}")
         raise typer.Exit(code=e.exit_code) from None
