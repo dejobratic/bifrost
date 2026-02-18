@@ -6,8 +6,8 @@ from bifrost.shared.config_manager import (
 from bifrost.shared.errors import BifrostError, ConfigError, LogCopyError, SshError
 from bifrost.shared.models import (
     BifrostConfig,
-    GitLabConfig,
     LogConfig,
+    PipelineConfig,
     RunMetadata,
     SetupConfig,
 )
@@ -19,9 +19,9 @@ __all__ = [
     "BifrostError",
     "ConfigError",
     "ConfigManager",
-    "GitLabConfig",
     "LogConfig",
     "LogCopyError",
+    "PipelineConfig",
     "RunMetadata",
     "SetupConfig",
     "SshError",

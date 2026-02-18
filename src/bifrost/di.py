@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Protocol
 
 from bifrost.infra.log_store import LogStore
-from bifrost.infra.pipeline_gate import PipelineGate, create_pipeline_gate
 from bifrost.shared import BifrostConfig, ConfigManager
 
 
@@ -15,7 +14,6 @@ class Container(Protocol):
 
     def get_config_manager(self) -> ConfigManager: ...
     def get_config(self, path: Path | None = None) -> BifrostConfig: ...
-    def get_pipeline_gate(self) -> PipelineGate: ...
     def get_log_store(self) -> LogStore: ...
 
 
@@ -29,7 +27,6 @@ class DefaultContainer:
     def __init__(self) -> None:
         self._config_manager: ConfigManager | None = None
         self._config: BifrostConfig | None = None
-        self._pipeline_gate: PipelineGate | None = None
         self._log_store: LogStore | None = None
 
     def get_config_manager(self) -> ConfigManager:
@@ -51,13 +48,6 @@ class DefaultContainer:
             config_manager = self.get_config_manager()
             self._config = config_manager.read_config(path)
         return self._config
-
-    def get_pipeline_gate(self) -> PipelineGate:
-        """Get the pipeline gate instance based on configuration."""
-        if self._pipeline_gate is None:
-            config = self.get_config()
-            self._pipeline_gate = create_pipeline_gate(config.gitlab)
-        return self._pipeline_gate
 
     def get_log_store(self) -> LogStore:
         """Get the log store instance."""

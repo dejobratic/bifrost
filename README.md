@@ -63,16 +63,29 @@ bf --help
 1. Add a setup configuration:
 
 ```bash
-bf config add office-a --host 10.0.0.5 --user ci --runner pytest --set-default
+bf config add office-a --host 10.0.0.5 --user ci --runner pytest
+bf config set-default office-a
 ```
 
-2. Run a command on a remote setup:
+2. (Optional) Add pipeline integration for CI checks:
+
+```bash
+bf pipeline add my-project --url https://gitlab.example.com --project-id 12345 --token-env GITLAB_TOKEN
+```
+
+3. Link the pipeline to your setup:
+
+```bash
+bf config add office-b --host 10.1.0.7 --user ci --pipeline my-project
+```
+
+4. Run a command on a remote setup:
 
 ```bash
 bf run -- pytest -m smoke
 ```
 
-3. Check logs in `.bifrost/office-a/<run-id>/`
+5. Check logs in `.bifrost/office-a/<run-id>/`
 
 ---
 
@@ -94,13 +107,20 @@ Add a new setup configuration.
 - `--host` (required): SSH hostname or IP
 - `--user` (required): SSH username
 - `--runner`: Default command to run (e.g., `pytest`)
+- `--pipeline`: Reference to a pipeline configuration for CI checks
 - `--remote-log-dir`: Remote log directory (default: `.bifrost/logs`)
 - `--local-log-dir`: Local log directory (default: `.bifrost/<name>`)
-- `--set-default`: Make this the default setup
 
-**Example:**
+**Examples:**
 ```bash
-bf config add office-a --host 10.0.0.5 --user ci --runner pytest --set-default
+# Add a basic setup
+bf config add office-a --host 10.0.0.5 --user ci --runner pytest
+
+# Add a setup with pipeline integration
+bf config add office-b --host 10.1.0.7 --user ci --pipeline my-project
+
+# Set the default setup
+bf config set-default office-a
 ```
 
 #### `bf config list`
@@ -130,7 +150,7 @@ bf config edit office-a --runner "pytest -v" --host 10.0.0.6
 bf config remove <name>
 ```
 
-Remove a setup configuration. Cannot remove the last remaining setup.
+Remove a setup configuration.
 
 #### `bf config set-default`
 
@@ -139,6 +159,44 @@ bf config set-default <name>
 ```
 
 Set the default setup to use when `--setup` is not specified.
+
+### `bf pipeline` --- manage CI/CD pipeline integration
+
+Manage named pipeline configurations for CI gate checks. Pipelines are referenced by setups to enable automatic CI busy checks before running commands.
+
+#### `bf pipeline add`
+
+```bash
+bf pipeline add <name> --url <url> --project-id <id> --token-env <env-var>
+```
+
+Add a new pipeline configuration.
+
+**Options:**
+- `--url` (required): GitLab instance URL
+- `--project-id` (required): GitLab project ID
+- `--token-env` (required): Environment variable name containing the GitLab token
+
+**Example:**
+```bash
+bf pipeline add my-project --url https://gitlab.example.com --project-id 12345 --token-env GITLAB_TOKEN
+```
+
+#### `bf pipeline list`
+
+```bash
+bf pipeline list
+```
+
+Display all configured pipelines in a table, showing which setups use each pipeline.
+
+#### `bf pipeline remove`
+
+```bash
+bf pipeline remove <name>
+```
+
+Remove a pipeline configuration. Fails if any setups currently reference this pipeline.
 
 ### `bf run` --- remote execution
 
@@ -221,16 +279,18 @@ version: 1
 defaults:
   setup: office-a
 
-gitlab:
-  url: "https://gitlab.example.com"
-  project_id: 12345
-  token_env: "GITLAB_TOKEN"     # env var name, NOT the token
+pipelines:
+  my-project:
+    url: "https://gitlab.example.com"
+    project_id: 12345
+    token_env: "GITLAB_TOKEN"     # env var name, NOT the token
 
 setups:
   office-a:
     host: "10.0.0.5"
     user: "ci"
     runner: "pytest"              # default command when none given
+    pipeline: my-project          # reference to pipeline config
     logs:
       remote_log_dir: ".bifrost/logs"     # relative to project root on remote
       local_log_dir: ".bifrost/office-a"
@@ -239,9 +299,15 @@ setups:
     host: "10.1.0.7"
     user: "ci"
     runner: "./run_tests.sh"
+    pipeline: my-project          # same pipeline, different setup
     logs:
       remote_log_dir: ".bifrost/logs"
       local_log_dir: ".bifrost/office-b"
+
+  office-c:
+    host: "10.2.0.8"
+    user: "ci"
+    # no pipeline - runs without CI checks
 ```
 
 ### Config reference
@@ -250,16 +316,15 @@ setups:
 |-------|----------|-------------|
 | `version` | yes | Must be `1` |
 | `defaults.setup` | no | Setup used when `--setup` is omitted |
-| `gitlab.url` | no | GitLab instance URL (omit entire `gitlab` block to disable CI gate) |
-| `gitlab.project_id` | yes* | GitLab project ID (*required if `gitlab` block exists) |
-| `gitlab.token_env` | yes* | Name of the env var holding the GitLab API token |
+| `pipelines.<name>.url` | yes* | GitLab instance URL (*required if pipeline exists) |
+| `pipelines.<name>.project_id` | yes* | GitLab project ID (*required if pipeline exists) |
+| `pipelines.<name>.token_env` | yes* | Name of the env var holding the GitLab API token |
 | `setups.<name>.host` | yes | SSH hostname or IP |
 | `setups.<name>.user` | yes | SSH username |
+| `setups.<name>.pipeline` | no | Reference to a pipeline configuration (enables CI checks) |
 | `setups.<name>.runner` | no | Default command when no `-- <cmd>` is given |
 | `setups.<name>.logs.remote_log_dir` | no | Remote log directory (default: `.bifrost/logs`) |
 | `setups.<name>.logs.local_log_dir` | no | Local log directory (default: `.bifrost/<setup-name>`) |
-
-**Note:** The old `artifacts` config key is still supported for backward compatibility but will be mapped to `logs` internally.
 
 ---
 
@@ -268,6 +333,7 @@ setups:
 - **No secrets in config files.** Tokens are read from environment variables. The config only stores the env var name (e.g. `token_env: "GITLAB_TOKEN"`).
 - **SSH auth** relies entirely on your system SSH agent and `~/.ssh/config`. bifrost only stores `host` and `user`.
 - Token values are never printed in output or error messages.
+- **Pipeline configurations** are named and reusable - multiple setups can reference the same pipeline configuration.
 
 ---
 
@@ -300,7 +366,7 @@ bifrost uses a vertical slice architecture with clean separation:
 ```
 src/bifrost/
   cli/       → main app, version, error handling
-  commands/  → vertical slices per feature (run, ssh, status, config)
+  commands/  → vertical slices per feature (run, ssh, status, config, pipeline)
   shared/    → domain models, config management, errors
   infra/     → SSH, rsync, GitLab API, git operations (subprocess-based)
   di.py      → dependency injection container
@@ -315,10 +381,10 @@ src/bifrost/
 
 The pipeline gate is protocol-based (`PipelineGate`), currently supporting:
 
-- `NonePipelineGate` --- always allows runs (used when no `gitlab` config is present)
-- `GitLabPipelineGate` --- checks GitLab for running/pending pipelines
+- `NonePipelineGate` --- always allows runs (used when setup has no pipeline configured)
+- `GitLabPipelineGate` --- checks GitLab for running/pending pipelines via API
 
-Adding new providers (GitHub Actions, Jenkins, etc.) means implementing the `PipelineGate` protocol.
+Pipeline configurations are named and managed separately from setups, allowing multiple setups to share the same pipeline configuration. Adding new providers (GitHub Actions, Jenkins, etc.) means implementing the `PipelineGate` protocol.
 
 ### Tech stack
 

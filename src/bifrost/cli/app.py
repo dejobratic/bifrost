@@ -49,8 +49,10 @@ def main() -> None:
     import bifrost.commands.ssh.command
     import bifrost.commands.status.command  # noqa: F401
     from bifrost.commands.config import config_app
+    from bifrost.commands.pipeline import pipeline_app
 
     app.add_typer(config_app)
+    app.add_typer(pipeline_app)
 
     try:
         app()

@@ -19,6 +19,7 @@ def edit_setup(
     name: str = typer.Argument(..., help="Setup name to edit"),
     host: str | None = typer.Option(None, "--host", help="New SSH hostname or IP"),
     user: str | None = typer.Option(None, "--user", help="New SSH username"),
+    port: int | None = typer.Option(None, "--port", help="New SSH port"),
     runner: str | None = typer.Option(None, "--runner", help="New default command"),
     remote_log_dir: str | None = typer.Option(
         None, "--remote-log-dir", help="New remote log directory"
@@ -45,15 +46,16 @@ def edit_setup(
         name=name,
         host=host or setup.host,
         user=user or setup.user,
+        port=port if port is not None else setup.port,
         runner=runner if runner is not None else setup.runner,
         logs=new_logs,
+        pipeline=setup.pipeline,
     )
 
     new_setups = {**config.setups, name: new_setup}
     new_config = BifrostConfig(
         setups=new_setups,
         default_setup=config.default_setup,
-        gitlab=config.gitlab,
     )
 
     config_manager.write_config(new_config)

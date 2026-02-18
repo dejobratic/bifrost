@@ -19,6 +19,16 @@ class TestSetupConfig:
         with pytest.raises(AttributeError):
             setup.host = "changed"  # type: ignore[misc]
 
+    def test_creates_with_port(self) -> None:
+        setup = SetupConfig(name="lab-a", host="10.0.0.1", user="ci", port=2222)
+
+        assert setup.port == 2222
+
+    def test_port_is_optional(self) -> None:
+        setup = SetupConfig(name="lab-a", host="10.0.0.1", user="ci")
+
+        assert setup.port is None
+
 
 class TestRunMetadata:
     def test_creates_with_defaults(self) -> None:

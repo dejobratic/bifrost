@@ -30,20 +30,12 @@ def remove_setup(
         )
         raise typer.Exit(code=3)
 
-    if len(config.setups) == 1:
-        err_console.print(
-            "[red]Error:[/red] Cannot remove the last setup. "
-            "At least one setup must remain."
-        )
-        raise typer.Exit(code=3)
-
     new_setups = {k: v for k, v in config.setups.items() if k != name}
     new_default = None if config.default_setup == name else config.default_setup
 
     new_config = BifrostConfig(
         setups=new_setups,
         default_setup=new_default,
-        gitlab=config.gitlab,
     )
 
     config_manager.write_config(new_config)

@@ -5,7 +5,7 @@ from typing import Protocol
 
 import httpx
 
-from bifrost.shared import ConfigError, GitLabConfig
+from bifrost.shared import ConfigError, PipelineConfig
 
 
 class PipelineGate(Protocol):
@@ -26,13 +26,13 @@ class GitLabPipelineGate:
 
     RUNNING_STATUSES = frozenset({"running", "pending"})
 
-    def __init__(self, gitlab_config: GitLabConfig) -> None:
-        self._config = gitlab_config
-        self._token = os.environ.get(gitlab_config.token_env, "")
+    def __init__(self, pipeline_config: PipelineConfig) -> None:
+        self._config = pipeline_config
+        self._token = os.environ.get(pipeline_config.token_env, "")
         if not self._token:
             raise ConfigError(
                 f"GitLab token not found in environment variable "
-                f"'{gitlab_config.token_env}'"
+                f"'{pipeline_config.token_env}'"
             )
 
     def is_busy(self, setup_name: str) -> bool:
@@ -53,7 +53,7 @@ class GitLabPipelineGate:
         return bool(response.json())
 
 
-def create_pipeline_gate(gitlab_config: GitLabConfig | None) -> PipelineGate:
-    if gitlab_config is None:
+def create_pipeline_gate(pipeline_config: PipelineConfig | None) -> PipelineGate:
+    if pipeline_config is None:
         return NonePipelineGate()
-    return GitLabPipelineGate(gitlab_config)
+    return GitLabPipelineGate(pipeline_config)

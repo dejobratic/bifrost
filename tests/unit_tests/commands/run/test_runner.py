@@ -43,7 +43,6 @@ def log_store() -> MagicMock:
 @pytest.fixture
 def runner(
     config: BifrostConfig,
-    pipeline_gate: MagicMock,
     log_store: MagicMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Runner:
@@ -53,13 +52,19 @@ def runner(
         )
     )
     fetch_checkout_mock = MagicMock()
+    pipeline_gate_mock = MagicMock(
+        return_value=MagicMock(is_busy=MagicMock(return_value=False))
+    )
 
     monkeypatch.setattr("bifrost.commands.run.runner.run_remote", run_remote_mock)
     monkeypatch.setattr(
         "bifrost.commands.run.runner.fetch_and_checkout", fetch_checkout_mock
     )
+    monkeypatch.setattr(
+        "bifrost.commands.run.runner.create_pipeline_gate", pipeline_gate_mock
+    )
 
-    return Runner(config, pipeline_gate, log_store)
+    return Runner(config, log_store)
 
 
 class TestResolveSetup:
@@ -72,10 +77,10 @@ class TestResolveSetup:
         assert result == setup_a
 
     def test_raises_when_no_name_and_no_default(
-        self, config: BifrostConfig, pipeline_gate: MagicMock, log_store: MagicMock
+        self, config: BifrostConfig, log_store: MagicMock
     ) -> None:
         config_no_default = BifrostConfig(setups=config.setups)
-        r = Runner(config_no_default, pipeline_gate, log_store)
+        r = Runner(config_no_default, log_store)
 
         with pytest.raises(ConfigError, match="No setup specified"):
             r.resolve_setup(None)
@@ -114,22 +119,30 @@ class TestRun:
             runner.run(setup_name="office-b")
 
     def test_checks_pipeline_gate(
-        self, runner: Runner, pipeline_gate: MagicMock
+        self, runner: Runner, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        pipeline_gate.is_busy.return_value = True
+        busy_gate = MagicMock(is_busy=MagicMock(return_value=True))
+        monkeypatch.setattr(
+            "bifrost.commands.run.runner.create_pipeline_gate",
+            MagicMock(return_value=busy_gate),
+        )
 
         with pytest.raises(CiBusyError, match="busy"):
             runner.run(setup_name="office-a", command=["pytest"])
 
     def test_force_skips_pipeline_gate(
-        self, runner: Runner, pipeline_gate: MagicMock
+        self, runner: Runner, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        pipeline_gate.is_busy.return_value = True
+        busy_gate = MagicMock(is_busy=MagicMock(return_value=True))
+        create_gate_mock = MagicMock(return_value=busy_gate)
+        monkeypatch.setattr(
+            "bifrost.commands.run.runner.create_pipeline_gate", create_gate_mock
+        )
 
         meta = runner.run(setup_name="office-a", command=["pytest"], force=True)
 
         assert meta.exit_code == 0
-        pipeline_gate.is_busy.assert_not_called()
+        busy_gate.is_busy.assert_not_called()
 
     def test_dry_run_does_not_execute(
         self, runner: Runner, log_store: MagicMock, monkeypatch: pytest.MonkeyPatch

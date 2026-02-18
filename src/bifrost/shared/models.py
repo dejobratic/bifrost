@@ -19,13 +19,9 @@ class LogConfig:
     ) -> LogConfig:
         data = as_mapping(raw, what="Setup logs")
 
-        # Support old 'artifacts' key for backward compatibility
-        remote_key = "remote_log_dir" if "remote_log_dir" in data else "remote_dir"
-        local_key = "local_log_dir" if "local_log_dir" in data else "local_dir"
-
         return cls(
-            remote_log_dir=str(data.get(remote_key, ".bifrost/logs")),
-            local_log_dir=str(data.get(local_key, default_local_log_dir)),
+            remote_log_dir=str(data.get("remote_log_dir", ".bifrost/logs")),
+            local_log_dir=str(data.get("local_log_dir", default_local_log_dir)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -36,58 +32,17 @@ class LogConfig:
 
 
 @dataclass(frozen=True, slots=True)
-class SetupConfig:
-    name: str
-    host: str
-    user: str
-    runner: str | None = None
-    logs: LogConfig = field(default_factory=LogConfig)
-
-    @classmethod
-    def from_mapping(cls, name: str, raw: Any) -> SetupConfig:
-        data = as_mapping(raw, what=f"Setup '{name}'")
-        host = require_str(data, "host", what=f"Setup '{name}'")
-        user = require_str(data, "user", what=f"Setup '{name}'")
-
-        # Support both 'logs' and old 'artifacts' key for backward compatibility
-        logs_data = data.get("logs") if "logs" in data else data.get("artifacts")
-        logs = LogConfig.from_mapping(
-            logs_data,
-            default_local_log_dir=f".bifrost/{name}",
-        )
-
-        runner = data.get("runner")
-        if runner is not None and not isinstance(runner, str):
-            raise ConfigError(f"Setup '{name}' runner must be a string")
-
-        return cls(name=name, host=host, user=user, runner=runner, logs=logs)
-
-    def default_logs(self) -> LogConfig:
-        return LogConfig(local_log_dir=f".bifrost/{self.name}")
-
-    def to_dict(self) -> dict[str, Any]:
-        data: dict[str, Any] = {"host": self.host, "user": self.user}
-        if self.runner is not None:
-            data["runner"] = self.runner
-
-        if self.logs != self.default_logs():
-            data["logs"] = self.logs.to_dict()
-
-        return data
-
-
-@dataclass(frozen=True, slots=True)
-class GitLabConfig:
+class PipelineConfig:
     url: str
     project_id: int
     token_env: str
 
     @classmethod
-    def from_mapping(cls, raw: Any) -> GitLabConfig:
-        data = as_mapping(raw, what="GitLab config")
-        url = require_str(data, "url", what="GitLab config")
-        token_env = require_str(data, "token_env", what="GitLab config")
-        project_id = require_int(data, "project_id", what="GitLab config")
+    def from_mapping(cls, raw: Any) -> PipelineConfig:
+        data = as_mapping(raw, what="Pipeline config")
+        url = require_str(data, "url", what="Pipeline config")
+        token_env = require_str(data, "token_env", what="Pipeline config")
+        project_id = require_int(data, "project_id", what="Pipeline config")
         return cls(url=url, project_id=project_id, token_env=token_env)
 
     def to_dict(self) -> dict[str, Any]:
@@ -99,10 +54,72 @@ class GitLabConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SetupConfig:
+    name: str
+    host: str
+    user: str
+    port: int | None = None
+    runner: str | None = None
+    logs: LogConfig = field(default_factory=LogConfig)
+    pipeline: str | None = None
+
+    @classmethod
+    def from_mapping(cls, name: str, raw: Any) -> SetupConfig:
+        data = as_mapping(raw, what=f"Setup '{name}'")
+        host = require_str(data, "host", what=f"Setup '{name}'")
+        user = require_str(data, "user", what=f"Setup '{name}'")
+
+        port = data.get("port")
+        if port is not None and not isinstance(port, int):
+            raise ConfigError(f"Setup '{name}' port must be an integer")
+
+        logs = LogConfig.from_mapping(
+            data.get("logs"),
+            default_local_log_dir=f".bifrost/{name}",
+        )
+
+        runner = data.get("runner")
+        if runner is not None and not isinstance(runner, str):
+            raise ConfigError(f"Setup '{name}' runner must be a string")
+
+        pipeline = data.get("pipeline")
+        if pipeline is not None and not isinstance(pipeline, str):
+            raise ConfigError(f"Setup '{name}' pipeline must be a string")
+
+        return cls(
+            name=name,
+            host=host,
+            user=user,
+            port=port,
+            runner=runner,
+            logs=logs,
+            pipeline=pipeline,
+        )
+
+    def default_logs(self) -> LogConfig:
+        return LogConfig(local_log_dir=f".bifrost/{self.name}")
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {"host": self.host, "user": self.user}
+        if self.port is not None:
+            data["port"] = self.port
+        if self.runner is not None:
+            data["runner"] = self.runner
+
+        if self.logs != self.default_logs():
+            data["logs"] = self.logs.to_dict()
+
+        if self.pipeline is not None:
+            data["pipeline"] = self.pipeline
+
+        return data
+
+
+@dataclass(frozen=True, slots=True)
 class BifrostConfig:
     setups: dict[str, SetupConfig]
     default_setup: str | None = None
-    gitlab: GitLabConfig | None = None
+    pipelines: dict[str, PipelineConfig] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, raw: Any) -> BifrostConfig:
@@ -114,8 +131,6 @@ class BifrostConfig:
 
         raw_setups = data.get("setups")
         setups_map = as_mapping(raw_setups, what="setups")
-        if not setups_map:
-            raise ConfigError("No setups defined")
 
         setups = {
             name: SetupConfig.from_mapping(name, setup_raw)
@@ -127,12 +142,14 @@ class BifrostConfig:
         if default_setup is not None and not isinstance(default_setup, str):
             raise ConfigError("defaults.setup must be a string")
 
-        gitlab_raw = data.get("gitlab")
-        gitlab = (
-            GitLabConfig.from_mapping(gitlab_raw) if gitlab_raw is not None else None
-        )
+        raw_pipelines = data.get("pipelines", {})
+        pipelines_map = as_mapping(raw_pipelines, what="pipelines")
+        pipelines = {
+            name: PipelineConfig.from_mapping(pipeline_raw)
+            for name, pipeline_raw in pipelines_map.items()
+        }
 
-        cfg = cls(setups=setups, default_setup=default_setup, gitlab=gitlab)
+        cfg = cls(setups=setups, default_setup=default_setup, pipelines=pipelines)
         cfg._validate()
         return cfg
 
@@ -144,6 +161,14 @@ class BifrostConfig:
                 f"not found in setups: {setup_list}"
             )
 
+        for setup_name, setup in self.setups.items():
+            if setup.pipeline is not None and setup.pipeline not in self.pipelines:
+                pipeline_list = list(self.pipelines.keys())
+                raise ConfigError(
+                    f"Setup '{setup_name}' references unknown pipeline "
+                    f"'{setup.pipeline}'. Available: {pipeline_list}"
+                )
+
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
             "version": 1,
@@ -151,8 +176,10 @@ class BifrostConfig:
         }
         if self.default_setup is not None:
             result["defaults"] = {"setup": self.default_setup}
-        if self.gitlab is not None:
-            result["gitlab"] = self.gitlab.to_dict()
+        if self.pipelines:
+            result["pipelines"] = {
+                name: pipeline.to_dict() for name, pipeline in self.pipelines.items()
+            }
         return result
 
 

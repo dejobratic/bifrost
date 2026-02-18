@@ -34,16 +34,19 @@ class TestRemoveSetup:
         assert "removed" in result.stdout
         mock_container.get_config_manager.return_value.write_config.assert_called_once()
 
-    def test_rejects_removing_last_setup(self) -> None:
+    def test_allows_removing_last_setup(self) -> None:
         container = MagicMock(spec=Container)
+        config_manager = MagicMock()
         config = BifrostConfig(
             setups={"only-one": SetupConfig(name="only-one", host="1.1.1.1", user="ci")}
         )
+        container.get_config_manager.return_value = config_manager
         container.get_config.return_value = config
 
         result = runner.invoke(config_app, ["remove", "only-one"], obj=container)
 
-        assert result.exit_code == 3
+        assert result.exit_code == 0
+        assert "removed" in result.stdout
 
     def test_rejects_unknown_setup(self, mock_container: MagicMock) -> None:
         result = runner.invoke(

@@ -6,6 +6,7 @@ from rich.table import Table
 
 from bifrost.cli.app import app
 from bifrost.di import Container
+from bifrost.infra.pipeline_gate import create_pipeline_gate
 from bifrost.infra.ssh import check_reachable
 
 console = Console()
@@ -21,7 +22,6 @@ def status(
     """Show CI pipeline state and setup reachability."""
     container: Container = ctx.obj
     config = container.get_config()
-    pipeline_gate = container.get_pipeline_gate()
 
     setups_to_check = {setup: config.setups[setup]} if setup else config.setups
 
@@ -34,6 +34,12 @@ def status(
     for name, setup_config in setups_to_check.items():
         reachable = check_reachable(setup_config)
         try:
+            pipeline_config = (
+                config.pipelines.get(setup_config.pipeline)
+                if setup_config.pipeline
+                else None
+            )
+            pipeline_gate = create_pipeline_gate(pipeline_config)
             busy = pipeline_gate.is_busy(name)
         except Exception:
             busy = None

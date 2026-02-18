@@ -7,9 +7,9 @@ from bifrost.infra.pipeline_gate import (
     NonePipelineGate,
     create_pipeline_gate,
 )
-from bifrost.shared import ConfigError, GitLabConfig
+from bifrost.shared import ConfigError, PipelineConfig
 
-GITLAB_CONFIG = GitLabConfig(
+GITLAB_CONFIG = PipelineConfig(
     url="https://gitlab.example.com",
     project_id=12345,
     token_env="GITLAB_TOKEN",

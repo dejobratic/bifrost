@@ -57,7 +57,6 @@ def run(
 def _create_runner(ctx: typer.Context) -> Runner:
     container: Container = ctx.obj
     config = container.get_config()
-    pipeline_gate = container.get_pipeline_gate()
     log_store = container.get_log_store()
-    runner = Runner(config=config, pipeline_gate=pipeline_gate, log_store=log_store)
+    runner = Runner(config=config, log_store=log_store)
     return runner

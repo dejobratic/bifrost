@@ -7,8 +7,8 @@ from bifrost.shared import (
     BifrostConfig,
     ConfigError,
     ConfigManager,
-    GitLabConfig,
     LogConfig,
+    PipelineConfig,
     SetupConfig,
 )
 
@@ -18,16 +18,18 @@ version: 1
 defaults:
   setup: office-a
 
-gitlab:
-  url: "https://gitlab.example.com"
-  project_id: 12345
-  token_env: "GITLAB_TOKEN"
+pipelines:
+  main:
+    url: "https://gitlab.example.com"
+    project_id: 12345
+    token_env: "GITLAB_TOKEN"
 
 setups:
   office-a:
     host: "10.0.0.5"
     user: "ci"
     runner: "pytest"
+    pipeline: main
     logs:
       remote_log_dir: ".bifrost/logs"
       local_log_dir: ".bifrost/office-a"
@@ -108,10 +110,11 @@ setups:
         assert config.setups["office-a"].host == "10.0.0.5"
         assert config.setups["office-a"].user == "ci"
         assert config.setups["office-a"].runner == "pytest"
+        assert config.setups["office-a"].pipeline == "main"
         assert config.setups["office-a"].logs.remote_log_dir == ".bifrost/logs"
-        assert config.gitlab is not None
-        assert config.gitlab.project_id == 12345
-        assert config.gitlab.token_env == "GITLAB_TOKEN"
+        assert "main" in config.pipelines
+        assert config.pipelines["main"].project_id == 12345
+        assert config.pipelines["main"].token_env == "GITLAB_TOKEN"
 
     def test_loads_minimal_config(
         self, tmp_config: Callable[[str], Path], config_manager: ConfigManager
@@ -121,7 +124,7 @@ setups:
         config = config_manager.read_config(path)
 
         assert config.default_setup is None
-        assert config.gitlab is None
+        assert config.pipelines == {}
         assert config.setups["lab"].host == "192.168.1.1"
 
     def test_defaults_log_local_dir_to_setup_name(
@@ -149,13 +152,13 @@ setups:
         with pytest.raises(ConfigError, match="Unsupported config version"):
             config_manager.read_config(path)
 
-    def test_rejects_missing_setups(
+    def test_allows_empty_setups(
         self, tmp_config: Callable[[str], Path], config_manager: ConfigManager
     ) -> None:
-        path = tmp_config("version: 1")
+        path = tmp_config("version: 1\nsetups: {}")
 
-        with pytest.raises(ConfigError, match="No setups defined"):
-            config_manager.read_config(path)
+        config = config_manager.read_config(path)
+        assert config.setups == {}
 
     def test_rejects_setup_without_host(
         self, tmp_config: Callable[[str], Path], config_manager: ConfigManager
@@ -182,13 +185,14 @@ setups:
         with pytest.raises(ConfigError, match="Default setup 'nonexistent' not found"):
             config_manager.read_config(path)
 
-    def test_rejects_incomplete_gitlab(
+    def test_rejects_incomplete_pipeline(
         self, tmp_config: Callable[[str], Path], config_manager: ConfigManager
     ) -> None:
         config_text = """\
 version: 1
-gitlab:
-  url: "https://gitlab.example.com"
+pipelines:
+  main:
+    url: "https://gitlab.example.com"
 setups:
   lab:
     host: "1.2.3.4"
@@ -198,6 +202,23 @@ setups:
 
         with pytest.raises(ConfigError, match="must have"):
             config_manager.read_config(path)
+
+    def test_loads_config_with_port(
+        self, tmp_config: Callable[[str], Path], config_manager: ConfigManager
+    ) -> None:
+        config_text = """\
+version: 1
+setups:
+  lab:
+    host: "1.2.3.4"
+    user: "ci"
+    port: 2222
+"""
+        path = tmp_config(config_text)
+
+        config = config_manager.read_config(path)
+
+        assert config.setups["lab"].port == 2222
 
 
 class TestConfigToDict:
@@ -209,23 +230,25 @@ class TestConfigToDict:
         assert result["version"] == 1
         assert result["setups"]["lab"] == {"host": "10.0.0.1", "user": "ci"}
         assert "defaults" not in result
-        assert "gitlab" not in result
+        assert "pipelines" not in result
 
     def test_full(self) -> None:
         config = BifrostConfig(
             setups={"office": _full_setup()},
             default_setup="office",
-            gitlab=GitLabConfig(
-                url="https://gitlab.example.com",
-                project_id=42,
-                token_env="GL_TOKEN",
-            ),
+            pipelines={
+                "main": PipelineConfig(
+                    url="https://gitlab.example.com",
+                    project_id=42,
+                    token_env="GL_TOKEN",
+                )
+            },
         )
 
         result = config.to_dict()
 
         assert result["defaults"] == {"setup": "office"}
-        assert result["gitlab"]["project_id"] == 42
+        assert result["pipelines"]["main"]["project_id"] == 42
         setup = result["setups"]["office"]
         assert setup["runner"] == "pytest"
         assert setup["logs"]["remote_log_dir"] == "build/out"
@@ -244,6 +267,21 @@ class TestConfigToDict:
 
         assert "runner" not in result["setups"]["lab"]
 
+    def test_includes_port_when_set(self) -> None:
+        setup = SetupConfig(name="lab", host="10.0.0.1", user="ci", port=2222)
+        config = BifrostConfig(setups={"lab": setup})
+
+        result = config.to_dict()
+
+        assert result["setups"]["lab"]["port"] == 2222
+
+    def test_omits_none_port(self) -> None:
+        config = BifrostConfig(setups={"lab": _minimal_setup()})
+
+        result = config.to_dict()
+
+        assert "port" not in result["setups"]["lab"]
+
 
 class TestWriteConfigRoundTrip:
     def test_round_trip(self, tmp_path: Path, config_manager: ConfigManager) -> None:
@@ -253,7 +291,11 @@ class TestWriteConfigRoundTrip:
                 "b": SetupConfig(name="b", host="5.6.7.8", user="v"),
             },
             default_setup="a",
-            gitlab=GitLabConfig(url="https://gl.test", project_id=99, token_env="TOK"),
+            pipelines={
+                "main": PipelineConfig(
+                    url="https://gl.test", project_id=99, token_env="TOK"
+                )
+            },
         )
         target = tmp_path / "config.yml"
 
@@ -268,5 +310,20 @@ class TestWriteConfigRoundTrip:
             assert got.host == orig.host
             assert got.user == orig.user
             assert got.runner == orig.runner
-        assert loaded.gitlab is not None
-        assert loaded.gitlab.project_id == 99
+        assert "main" in loaded.pipelines
+        assert loaded.pipelines["main"].project_id == 99
+
+    def test_round_trip_with_port(
+        self, tmp_path: Path, config_manager: ConfigManager
+    ) -> None:
+        original = BifrostConfig(
+            setups={
+                "a": SetupConfig(name="a", host="1.2.3.4", user="u", port=2222),
+            },
+        )
+        target = tmp_path / "config.yml"
+
+        config_manager.write_config(original, path=target)
+        loaded = config_manager.read_config(target)
+
+        assert loaded.setups["a"].port == 2222

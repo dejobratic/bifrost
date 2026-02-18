@@ -5,7 +5,7 @@ import uuid
 from bifrost.commands.run.errors import CiBusyError, RemoteCommandError
 from bifrost.infra.git_ops import fetch_and_checkout
 from bifrost.infra.log_store import LogStore
-from bifrost.infra.pipeline_gate import PipelineGate
+from bifrost.infra.pipeline_gate import create_pipeline_gate
 from bifrost.infra.ssh import run_remote
 from bifrost.shared import BifrostConfig, ConfigError, RunMetadata, SetupConfig
 
@@ -13,11 +13,8 @@ from bifrost.shared import BifrostConfig, ConfigError, RunMetadata, SetupConfig
 class Runner:
     """Orchestrates running commands on remote setups."""
 
-    def __init__(
-        self, config: BifrostConfig, pipeline_gate: PipelineGate, log_store: LogStore
-    ) -> None:
+    def __init__(self, config: BifrostConfig, log_store: LogStore) -> None:
         self._config = config
-        self._pipeline_gate = pipeline_gate
         self._log_store = log_store
 
     def resolve_setup(self, setup_name: str | None) -> SetupConfig:
@@ -45,7 +42,11 @@ class Runner:
                 f"No command provided and no default runner for setup '{setup.name}'"
             )
 
-        if not force and self._pipeline_gate.is_busy(setup.name):
+        pipeline_config = (
+            self._config.pipelines.get(setup.pipeline) if setup.pipeline else None
+        )
+        pipeline_gate = create_pipeline_gate(pipeline_config)
+        if not force and pipeline_gate.is_busy(setup.name):
             raise CiBusyError(
                 f"CI pipeline is busy on setup '{setup.name}'. Use --force to override."
             )

@@ -46,3 +46,17 @@ class TestEditSetup:
         )
 
         assert result.exit_code == 3
+
+    def test_edits_port(self, mock_container: MagicMock) -> None:
+        result = runner.invoke(
+            config_app,
+            ["edit", "test-rig", "--port", "2222"],
+            obj=mock_container,
+        )
+
+        assert result.exit_code == 0
+        assert "updated successfully" in result.stdout
+        config_manager = mock_container.get_config_manager.return_value
+        config_manager.write_config.assert_called_once()
+        written_config = config_manager.write_config.call_args[0][0]
+        assert written_config.setups["test-rig"].port == 2222

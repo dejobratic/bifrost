@@ -33,7 +33,6 @@ def set_default_setup(
     new_config = BifrostConfig(
         setups=config.setups,
         default_setup=name,
-        gitlab=config.gitlab,
     )
 
     config_manager.write_config(new_config)
